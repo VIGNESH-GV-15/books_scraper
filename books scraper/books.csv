@@ -1,0 +1,64 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import time
+
+BASE_URL = "http://books.toscrape.com/catalogue/"
+START_URL = BASE_URL + "page-1.html"
+
+# Convert star rating text to number
+def rating_to_number(rating_class):
+    ratings_map = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
+    return ratings_map.get(rating_class, 0)
+
+# Extract data from a single book item
+def extract_book_data(book):
+    title = book.h3.a['title']
+    price = book.find("p", class_="price_color").text.strip()
+    rating_class = book.find("p", class_="star-rating")['class'][1]
+    rating = rating_to_number(rating_class)
+    return [title, price, rating]
+
+# Scrape data from a single page
+def scrape_page(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    books = soup.find_all("article", class_="product_pod")
+    return [extract_book_data(book) for book in books]
+
+# Crawl through all pages
+def scrape_all_books():
+    all_books = []
+    page_num = 1
+
+    while True:
+        page_url = f"{BASE_URL}page-{page_num}.html"
+        print(f"Scraping: {page_url}")
+        try:
+            books = scrape_page(page_url)
+            if not books:
+                break
+            all_books.extend(books)
+            page_num += 1
+            time.sleep(1)  # Be polite
+        except requests.exceptions.HTTPError:
+            break
+
+    return all_books
+
+# Save to CSV
+def save_to_csv(data, filename="books.csv"):
+    with open(filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Title", "Price", "Rating"])
+        writer.writerows(data)
+    print(f"✅ Saved {len(data)} records to {filename}")
+
+# Main
+def main():
+    books = scrape_all_books()
+    save_to_csv(books)
+
+if __name__ == "__main__":
+    main()
